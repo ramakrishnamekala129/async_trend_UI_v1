@@ -142,6 +142,9 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
           <Link className="controlBtn secondary" href="/">
             Back To Trends
           </Link>
+          <Link className="controlBtn secondary" href="/astro/planetary-aspects">
+            Planetary Aspects
+          </Link>
           <Link className="controlBtn secondary" href="/astro">
             Full Astro Tab
           </Link>

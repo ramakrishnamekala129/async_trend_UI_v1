@@ -139,6 +139,9 @@ export function AstroPage({ userEmail, mode = "full" }: Props) {
           <Link className="controlBtn secondary" href="/">
             Back To Trends
           </Link>
+          <Link className="controlBtn secondary" href="/astro/planetary-aspects">
+            Planetary Aspects
+          </Link>
           {mode === "full" ? (
             <Link className="controlBtn secondary" href="/astro/moon-ascendant">
               Moon & Ascendant Tab

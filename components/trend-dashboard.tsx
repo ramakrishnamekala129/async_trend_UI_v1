@@ -672,6 +672,12 @@ export function TrendDashboard({ data, userEmail }: Props) {
           <Link className="controlBtn secondary" href="/astro">
             Open Astro Workspace
           </Link>
+          <Link className="controlBtn secondary" href="/astro/planetary-aspects">
+            Planetary Aspect Explorer
+          </Link>
+          <Link className="controlBtn secondary" href="/astro/moon-ascendant">
+            Ascendant & Moon
+          </Link>
         </div>
       </header>
 
