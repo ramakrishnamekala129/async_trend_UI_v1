@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { EclipticGeoMoon, MakeTime } from "astronomy-engine";
+import * as swe from "@swisseph/node";
 
 type ExplorerRow = {
   date_key: string;
@@ -84,6 +85,31 @@ function buildExplorerRow(date: Date, value: number): ExplorerRow {
     value: longitude,
     longitude
   };
+}
+
+function generateNodeSwissRows(input: {
+  startDate: string;
+  endDate: string;
+  includeMoon: boolean;
+  includeAscendant: boolean;
+}): { moon: ExplorerRow[]; ascendant: ExplorerRow[] } {
+  const moon: ExplorerRow[] = [];
+  const ascendant: ExplorerRow[] = [];
+  let cursor = new Date(`${input.startDate}T00:00:00+05:30`);
+  const end = new Date(`${input.endDate}T23:59:00+05:30`);
+  while (cursor <= end) {
+    const jdUt = swe.dateToJulianDay(cursor);
+    if (input.includeMoon) {
+      const moonPos = swe.calculatePosition(jdUt, swe.Planet.Moon);
+      moon.push(buildExplorerRow(cursor, moonPos.longitude));
+    }
+    if (input.includeAscendant) {
+      const houses = swe.calculateHouses(jdUt, 19.054999, 72.8692035);
+      ascendant.push(buildExplorerRow(cursor, houses.ascendant));
+    }
+    cursor = new Date(cursor.getTime() + 60 * 1000);
+  }
+  return { moon, ascendant };
 }
 
 function generateApproxRows(input: {
@@ -190,16 +216,22 @@ export async function GET(request: Request) {
   const scriptPath = path.join(process.cwd(), "lib", "astro", "moon_asc_range.py");
   const args = [scriptPath, startDate, endDate, includeMoon ? "1" : "0", includeAscendant ? "1" : "0"];
 
-  let precisionMode: "python_swisseph" | "js_fallback" = "js_fallback";
-  let payload = runPython("python", args);
-  if (payload) {
-    precisionMode = "python_swisseph";
-  } else {
-    payload = runPython("py", ["-3", ...args]);
+  let precisionMode: "node_swisseph" | "python_swisseph" | "js_fallback" = "js_fallback";
+  let payload: { moon: ExplorerRow[]; ascendant: ExplorerRow[] } | null = null;
+  try {
+    payload = generateNodeSwissRows({ startDate, endDate, includeMoon, includeAscendant });
+    precisionMode = "node_swisseph";
+  } catch {
+    payload = runPython("python", args);
     if (payload) {
       precisionMode = "python_swisseph";
     } else {
-      payload = generateApproxRows({ startDate, endDate, includeMoon, includeAscendant });
+      payload = runPython("py", ["-3", ...args]);
+      if (payload) {
+        precisionMode = "python_swisseph";
+      } else {
+        payload = generateApproxRows({ startDate, endDate, includeMoon, includeAscendant });
+      }
     }
   }
 

@@ -15,7 +15,7 @@ type Row = {
 type ApiPayload = {
   range: { startDate: string; endDate: string; daySpan: number };
   controls: {
-    precisionMode: "python_swisseph" | "js_fallback";
+    precisionMode: "node_swisseph" | "python_swisseph" | "js_fallback";
   };
   moon: { rawTotal: number; rawRows: Row[]; filteredTotal: number; filteredRows: Row[] };
   ascendant: { rawTotal: number; rawRows: Row[]; filteredTotal: number; filteredRows: Row[] };
