@@ -69,6 +69,14 @@ function DataTable({ rows, maxHeight = 360 }: { rows: GenericRow[]; maxHeight?: 
 
   if (!rows.length) return <p className="muted">No rows found.</p>;
 
+  function signalStyle(value: string) {
+    const v = value.trim().toLowerCase();
+    if (v === "bullish") return { backgroundColor: "#008a1f", color: "#ffffff", fontWeight: 700 as const };
+    if (v === "bearish") return { backgroundColor: "#c20000", color: "#ffffff", fontWeight: 700 as const };
+    if (v === "depends") return { backgroundColor: "#c88400", color: "#111111", fontWeight: 700 as const };
+    return {};
+  }
+
   return (
     <div className="tableWrap" style={{ maxHeight }}>
       <table>
@@ -83,7 +91,12 @@ function DataTable({ rows, maxHeight = 360 }: { rows: GenericRow[]; maxHeight?: 
           {rows.map((row, index) => (
             <tr key={`row-${index}`}>
               {columns.map((column) => (
-                <td key={`${index}-${column}`}>{String(row[column] ?? "")}</td>
+                <td
+                  key={`${index}-${column}`}
+                  style={column === "FinalSignal" ? signalStyle(String(row[column] ?? "")) : undefined}
+                >
+                  {String(row[column] ?? "")}
+                </td>
               ))}
             </tr>
           ))}
