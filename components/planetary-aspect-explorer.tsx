@@ -7,6 +7,13 @@ type GenericRow = Record<string, string | number>;
 
 type Payload = {
   range: { startDate: string; endDate: string; daySpan: number };
+  filters: {
+    moonMode: string;
+    planet1: string[];
+    planet2: string[];
+    selectedAspects: string[];
+    orb: number;
+  };
   totalRows: number;
   truncated: boolean;
   rows: GenericRow[];
@@ -98,6 +105,7 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [payload, setPayload] = useState<Payload | null>(null);
+  const [dtSort, setDtSort] = useState<"desc" | "asc">("desc");
 
   function toggleAspect(value: number) {
     setAspects((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort((a, b) => a - b)));
@@ -128,6 +136,28 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
       setLoading(false);
     }
   }
+
+  const sortedRows = useMemo(() => {
+    const rows = payload?.rows ?? [];
+    const copy = [...rows];
+    copy.sort((left, right) => {
+      const a = String(left.DT ?? "");
+      const b = String(right.DT ?? "");
+      return dtSort === "asc" ? a.localeCompare(b) : b.localeCompare(a);
+    });
+    return copy;
+  }, [payload, dtSort]);
+
+  const sortedDetailedRows = useMemo(() => {
+    const rows = payload?.detailedRows ?? [];
+    const copy = [...rows];
+    copy.sort((left, right) => {
+      const a = String(left.DT ?? "");
+      const b = String(right.DT ?? "");
+      return dtSort === "asc" ? a.localeCompare(b) : b.localeCompare(a);
+    });
+    return copy;
+  }, [payload, dtSort]);
 
   return (
     <main className="page">
@@ -252,13 +282,25 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
             Orb (± degrees): {Number(orb).toFixed(2)}
             <input type="range" min="0.1" max="5" step="0.1" value={orb} onChange={(event) => setOrb(event.target.value)} />
           </label>
+          <label>
+            Table DT Priority
+            <select value={dtSort} onChange={(event) => setDtSort(event.target.value as "desc" | "asc")}>
+              <option value="desc">Newest DT first</option>
+              <option value="asc">Oldest DT first</option>
+            </select>
+          </label>
         </div>
 
         {error ? <p className="astroError">{error}</p> : null}
         {payload ? (
-          <p className="muted">
-            Range: {payload.range.startDate} to {payload.range.endDate} ({payload.range.daySpan} days)
-          </p>
+          <>
+            <p className="muted">
+              Range: {payload.range.startDate} to {payload.range.endDate} ({payload.range.daySpan} days)
+            </p>
+            <p className="muted">
+              Applied: {payload.filters.moonMode} | orb {payload.filters.orb} | aspects {payload.filters.selectedAspects.join(", ")}
+            </p>
+          </>
         ) : null}
       </section>
 
@@ -267,11 +309,11 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
           <section className="panel">
             <h3>Results ({payload.totalRows} rows)</h3>
             {payload.truncated ? <p className="muted">Result set truncated. Narrow filters or date range for full output.</p> : null}
-            <DataTable rows={payload.rows} maxHeight={420} />
+            <DataTable rows={sortedRows} maxHeight={420} />
           </section>
           <section className="panel">
             <h3>Detailed Rows</h3>
-            <DataTable rows={payload.detailedRows} maxHeight={420} />
+            <DataTable rows={sortedDetailedRows} maxHeight={420} />
           </section>
         </>
       ) : null}
