@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { EclipticGeoMoon, MakeTime } from "astronomy-engine";
 
 type ExplorerRow = {
   date_key: string;
@@ -42,28 +43,9 @@ function gmstDeg(jd: number): number {
 }
 
 function moonLongitudeApprox(date: Date): number {
-  const jd = toJulianDay(date);
-  const d = jd - 2451543.5;
-  const n = normalizeDegrees(125.1228 - 0.0529538083 * d);
-  const i = 5.1454;
-  const w = normalizeDegrees(318.0634 + 0.1643573223 * d);
-  const a = 60.2666;
-  const e = 0.0549;
-  const m = normalizeDegrees(115.3654 + 13.0649929509 * d);
-  const e0 = m + ((180 / Math.PI) * e * Math.sin((m * Math.PI) / 180)) * (1 + e * Math.cos((m * Math.PI) / 180));
-  const xv = a * (Math.cos((e0 * Math.PI) / 180) - e);
-  const yv = a * Math.sqrt(1 - e * e) * Math.sin((e0 * Math.PI) / 180);
-  const v = (Math.atan2(yv, xv) * 180) / Math.PI;
-  const r = Math.sqrt(xv * xv + yv * yv);
-  const xh =
-    r *
-    (Math.cos((n * Math.PI) / 180) * Math.cos(((v + w) * Math.PI) / 180) -
-      Math.sin((n * Math.PI) / 180) * Math.sin(((v + w) * Math.PI) / 180) * Math.cos((i * Math.PI) / 180));
-  const yh =
-    r *
-    (Math.sin((n * Math.PI) / 180) * Math.cos(((v + w) * Math.PI) / 180) +
-      Math.cos((n * Math.PI) / 180) * Math.sin(((v + w) * Math.PI) / 180) * Math.cos((i * Math.PI) / 180));
-  return normalizeDegrees((Math.atan2(yh, xh) * 180) / Math.PI);
+  // High-precision tropical ecliptic Moon longitude (pure JS fallback for environments without Python/Swiss Ephemeris).
+  const moon = EclipticGeoMoon(MakeTime(date));
+  return normalizeDegrees(moon.lon);
 }
 
 function ascendantApprox(date: Date): number {

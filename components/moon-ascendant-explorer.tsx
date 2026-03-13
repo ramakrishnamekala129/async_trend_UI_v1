@@ -14,6 +14,9 @@ type Row = {
 
 type ApiPayload = {
   range: { startDate: string; endDate: string; daySpan: number };
+  controls: {
+    precisionMode: "python_swisseph" | "js_fallback";
+  };
   moon: { rawTotal: number; rawRows: Row[]; filteredTotal: number; filteredRows: Row[] };
   ascendant: { rawTotal: number; rawRows: Row[]; filteredTotal: number; filteredRows: Row[] };
 };
@@ -197,9 +200,12 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
 
         {error ? <p className="astroError">{error}</p> : null}
         {payload ? (
-          <p className="muted">
-            Range: {payload.range.startDate} to {payload.range.endDate} ({payload.range.daySpan} days)
-          </p>
+          <>
+            <p className="muted">
+              Range: {payload.range.startDate} to {payload.range.endDate} ({payload.range.daySpan} days)
+            </p>
+            <p className="muted">Precision mode: {payload.controls.precisionMode}</p>
+          </>
         ) : null}
       </section>
 
