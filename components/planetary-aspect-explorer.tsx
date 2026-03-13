@@ -90,7 +90,7 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
   const [startDate, setStartDate] = useState(() => shiftIsoDate(todayIst(), -30));
   const [endDate, setEndDate] = useState(todayIst);
   const [autoBuild, setAutoBuild] = useState(false);
-  const [moonMode, setMoonMode] = useState("all");
+  const [moonMode, setMoonMode] = useState("exclude_moon_ascendant");
   const [planet1, setPlanet1] = useState("");
   const [planet2, setPlanet2] = useState("");
   const [orb, setOrb] = useState("1");
@@ -278,4 +278,3 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
     </main>
   );
 }
-
