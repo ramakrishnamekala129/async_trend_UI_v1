@@ -1,0 +1,8 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@drawable/ic_brand_bg"/>
+  <item
+    android:gravity="center"
+    android:drawable="@drawable/ic_brand_fg"
+    android:width="84dp"
+    android:height="84dp"/>
+</layer-list>

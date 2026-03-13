@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Trend Tables",
+    "slug": "trend-table-viewer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.trenddates.tableviewer",
+      "versionCode": 1
+    }
+  }
+}

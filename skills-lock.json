@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "frontend-ui-ux": {
+      "source": "zpankz/mcp-skillset",
+      "sourceType": "github",
+      "computedHash": "80d16525e5a3a9827479af3374ad7867420332c3b8a30b1f66dc7fd426aad0c4"
+    },
+    "senior-fullstack": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "ae5b8441fff529f9623d723252ca4578ec4f8ab978ff987b9f9d26c7f3daa19c"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "computedHash": "4cfe5e95a230616c17d92b44e3cd37bae543ce087a7756a446a62f77d7c58a37"
+    }
+  }
+}

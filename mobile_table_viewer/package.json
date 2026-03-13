@@ -1,0 +1,27 @@
+{
+  "name": "mobile_table_viewer",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "sync-data": "powershell -ExecutionPolicy Bypass -File ./scripts/sync_trend_tables.ps1",
+    "build-apk": "eas build -p android --profile preview",
+    "bundle-release": "powershell -ExecutionPolicy Bypass -File ./scripts/build_release_bundle.ps1",
+    "release-apk-emulator": "powershell -ExecutionPolicy Bypass -File ./scripts/build_emulator_release_apk.ps1"
+  },
+  "dependencies": {
+    "expo": "55.0.5",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "babel-preset-expo": "~55.0.10"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
