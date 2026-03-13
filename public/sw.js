@@ -1,4 +1,4 @@
-const CACHE_NAME = "trenddates-pwa-v2";
+const CACHE_NAME = "trenddates-pwa-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.svg", "/icons/icon-512.svg"];
 
 self.addEventListener("install", (event) => {
@@ -26,16 +26,9 @@ self.addEventListener("fetch", (event) => {
   // Always fetch the latest service worker file from network.
   if (url.pathname === "/sw.js") return;
 
-  if (url.pathname.startsWith("/api/trends")) {
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          const copy = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
+  // Never cache API responses; always go to network for fresh astro/trend data.
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
