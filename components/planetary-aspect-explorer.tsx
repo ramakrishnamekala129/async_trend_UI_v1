@@ -190,6 +190,9 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
           </div>
         </div>
         <div className="astroTopNav">
+          <Link className="controlBtn secondary" href="/">
+            Back To Trends
+          </Link>
           <Link className="controlBtn secondary" href="/astro">
             Full Astro Tab
           </Link>
