@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -120,6 +120,15 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
   const [payload, setPayload] = useState<Payload | null>(null);
   const [dtSort, setDtSort] = useState<"desc" | "asc">("desc");
 
+  function resetAspectFilters() {
+    setMoonMode("exclude_moon_ascendant");
+    setPlanet1("");
+    setPlanet2("");
+    setOrb("1");
+    setAspects(ASPECT_OPTIONS);
+    setDtSort("desc");
+  }
+
   function toggleAspect(value: number) {
     setAspects((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort((a, b) => a - b)));
   }
@@ -200,9 +209,25 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
             Ascendant & Moon
           </Link>
         </div>
+        <div className="heroKpis">
+          <span className="kpiPill">Range: {startDate} to {endDate}</span>
+          <span className="kpiPill">Rows: {payload?.totalRows ?? 0}</span>
+          <span className="kpiPill">Sort: {dtSort === "asc" ? "Oldest first" : "Newest first"}</span>
+        </div>
+        <div className="quickNav">
+          <a className="controlBtn secondary" href="#aspect-filters">
+            Filters
+          </a>
+          <a className="controlBtn secondary" href="#aspect-results">
+            Results
+          </a>
+          <a className="controlBtn secondary" href="#aspect-detailed">
+            Detailed
+          </a>
+        </div>
       </header>
 
-      <section className="filtersPanel astroFilters">
+      <section className="filtersPanel astroFilters" id="aspect-filters">
         <div className="astroFormGrid">
           <label>
             Start Date Planet
@@ -234,7 +259,10 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
           <button type="button" className="controlBtn" onClick={() => void runExplorer()} disabled={loading}>
             {loading ? "Building..." : "Build/Update Aspect Cache"}
           </button>
-          <label style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button type="button" className="controlBtn secondary" onClick={resetAspectFilters}>
+            Reset Filters
+          </button>
+          <label className="inlineCheck">
             <input type="checkbox" checked={autoBuild} onChange={(event) => setAutoBuild(event.target.checked)} />
             Auto build when date range changes
           </label>
@@ -277,16 +305,16 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
           </label>
         </div>
 
-        <div className="panel" style={{ padding: "12px" }}>
+        <div className="panel panelCompact">
           <h3>Choose Aspects (multiple)</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+          <div className="aspectChipWrap">
             {ASPECT_OPTIONS.map((aspect) => {
               const active = aspects.includes(aspect);
               return (
                 <button
                   key={aspect}
                   type="button"
-                  className={`controlBtn ${active ? "" : "secondary"}`}
+                  className={`controlBtn aspectChip ${active ? "" : "secondary"}`}
                   onClick={() => toggleAspect(aspect)}
                 >
                   {aspect}°
@@ -295,11 +323,11 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
             })}
           </div>
           <label>
-            Orb (± degrees): {Number(orb).toFixed(2)}
+            Orb (+/- degrees): {Number(orb).toFixed(2)}
             <input type="range" min="0.1" max="5" step="0.1" value={orb} onChange={(event) => setOrb(event.target.value)} />
           </label>
           <label>
-            Table DT Priority
+            Table DT Order
             <select value={dtSort} onChange={(event) => setDtSort(event.target.value as "desc" | "asc")}>
               <option value="desc">Newest DT first</option>
               <option value="asc">Oldest DT first</option>
@@ -322,12 +350,12 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
 
       {payload ? (
         <>
-          <section className="panel">
+          <section className="panel" id="aspect-results">
             <h3>Results ({payload.totalRows} rows)</h3>
             {payload.truncated ? <p className="muted">Result set truncated. Narrow filters or date range for full output.</p> : null}
             <DataTable rows={sortedRows} maxHeight={420} />
           </section>
-          <section className="panel">
+          <section className="panel" id="aspect-detailed">
             <h3>Detailed Rows</h3>
             <DataTable rows={sortedDetailedRows} maxHeight={420} />
           </section>
@@ -336,3 +364,5 @@ export function PlanetaryAspectExplorer({ userEmail }: Props) {
     </main>
   );
 }
+
+

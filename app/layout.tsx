@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { DM_Sans, Sora } from "next/font/google";
 import { PwaRegister } from "@/components/pwa-register";
+import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -39,8 +40,16 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(!t){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`
+          }}
+        />
+      </head>
       <body className={`${dmSans.variable} ${sora.variable}`}>
         <PwaRegister />
+        <ThemeToggle />
         {children}
       </body>
     </html>

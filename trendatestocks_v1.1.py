@@ -231,6 +231,7 @@ BACKTEST_MONTHS = 6
 DB_SAVE_EVERY = 25
 CHUNK_SLEEP_MIN = 0.05
 CHUNK_SLEEP_MAX = 0.2
+STOCK_UNIVERSE_JSON = Path("data/stock_universes.json")
 
 NSE_HEADERS = {
     "accept": "application/json,text/plain,*/*",
@@ -489,6 +490,37 @@ async def fetch_fut_symbols() -> list[str]:
         & (instruments_df["instrument_type"] != "PE")
     ]
     return list(instruments_df["underlying_symbol"].dropna().unique())
+
+
+def load_symbols_from_stock_universes(universe_key: str) -> list[str]:
+    if not STOCK_UNIVERSE_JSON.exists():
+        raise FileNotFoundError(f"Missing universe file: {STOCK_UNIVERSE_JSON}")
+
+    with STOCK_UNIVERSE_JSON.open("r", encoding="utf-8") as file:
+        payload = json.load(file)
+
+    universes = payload.get("universes", {})
+    key_map = {
+        "NIFTY50": "nifty50",
+        "NIFTY100": "nifty100",
+        "NIFTY250": "nifty250",
+        "NIFTY500": "nifty500",
+        "FNO": "fno",
+    }
+    resolved_key = key_map.get(universe_key.upper())
+    if not resolved_key:
+        raise ValueError(
+            f"Invalid STOCK_UNIVERSE='{universe_key}'. Use one of: {', '.join(key_map)}"
+        )
+
+    symbols = universes.get(resolved_key, [])
+    if not isinstance(symbols, list):
+        raise ValueError(f"Universe '{resolved_key}' is not a valid list in {STOCK_UNIVERSE_JSON}")
+
+    normalized = sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()})
+    if not normalized:
+        raise ValueError(f"Universe '{resolved_key}' has no symbols in {STOCK_UNIVERSE_JSON}")
+    return normalized
 
 
 async def warm_nse_cookie(
@@ -753,6 +785,7 @@ async def run_pipeline() -> pd.DataFrame:
     env_db_save_every = os.getenv("DB_SAVE_EVERY", str(DB_SAVE_EVERY)).strip()
 
     env_backtest_months = os.getenv("BACKTEST_MONTHS", str(BACKTEST_MONTHS)).strip()
+    env_stock_universe = os.getenv("STOCK_UNIVERSE", "FNO").strip().upper()
     try:
         backtest_months = max(1, int(env_backtest_months))
     except ValueError:
@@ -796,7 +829,20 @@ async def run_pipeline() -> pd.DataFrame:
             current_month,
         )
 
-    list_fut_syms = await fetch_fut_symbols()
+    if env_stock_universe == "FNO":
+        list_fut_syms = await fetch_fut_symbols()
+        symbol_source = "Upstox NSE_FO underlying symbols"
+    else:
+        list_fut_syms = load_symbols_from_stock_universes(env_stock_universe)
+        symbol_source = f"{STOCK_UNIVERSE_JSON}:{env_stock_universe}"
+
+    list_fut_syms = sorted({sym.strip().upper() for sym in list_fut_syms if sym and str(sym).strip()})
+    LOGGER.info(
+        "Stock universe: %s | source=%s | symbols=%s",
+        env_stock_universe,
+        symbol_source,
+        len(list_fut_syms),
+    )
 
     symbol_sem = asyncio.Semaphore(symbol_concurrency)
     request_sem = asyncio.Semaphore(request_concurrency)

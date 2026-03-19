@@ -149,10 +149,26 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
             Full Astro Tab
           </Link>
         </div>
+        <div className="heroKpis">
+          <span className="kpiPill">Range: {startDate} to {endDate}</span>
+          <span className="kpiPill">Moon rows: {payload?.moon.rawTotal ?? 0}</span>
+          <span className="kpiPill">Asc rows: {payload?.ascendant.rawTotal ?? 0}</span>
+        </div>
+        <div className="quickNav">
+          <a className="controlBtn secondary" href="#moon-filters">
+            Filters
+          </a>
+          <a className="controlBtn secondary" href="#moon-raw">
+            Raw
+          </a>
+          <a className="controlBtn secondary" href="#moon-filtered">
+            Filtered
+          </a>
+        </div>
       </header>
 
-      <section className="filtersPanel astroFilters">
-        <div className="astroFormGrid">
+      <section className="filtersPanel astroFilters" id="moon-filters">
+        <div className="moonControlRow">
           <label>
             Start Date
             <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -161,24 +177,18 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
             End Date
             <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </label>
-        </div>
-
-        <div className="astroGrid">
-          <label style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <label className="moonCheck">
             <input type="checkbox" checked={includeMoon} onChange={(event) => setIncludeMoon(event.target.checked)} />
-            Populate Moon cache
+            <span>Populate Moon cache</span>
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <label className="moonCheck">
             <input
               type="checkbox"
               checked={includeAscendant}
               onChange={(event) => setIncludeAscendant(event.target.checked)}
             />
-            Populate Ascendant cache
+            <span>Populate Ascendant cache</span>
           </label>
-        </div>
-
-        <div className="astroGrid">
           <label>
             Moon longitude filter
             <input value={moonTarget} onChange={(event) => setMoonTarget(event.target.value)} inputMode="decimal" />
@@ -187,14 +197,11 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
             Ascendant longitude filter
             <input value={ascTarget} onChange={(event) => setAscTarget(event.target.value)} inputMode="decimal" />
           </label>
-        </div>
-
-        <div className="astroGrid">
           <label>
-            Tolerance (± degrees)
+            Tolerance (+/- degrees)
             <input value={tolerance} onChange={(event) => setTolerance(event.target.value)} inputMode="decimal" />
           </label>
-          <div className="astroActions" style={{ alignItems: "end" }}>
+          <div className="moonRunWrap">
             <button type="button" className="controlBtn" onClick={() => void runExplorer()} disabled={loading}>
               {loading ? "Loading..." : "Run Explorer"}
             </button>
@@ -214,7 +221,7 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
 
       {payload ? (
         <>
-          <section className="panel">
+          <section className="panel" id="moon-raw">
             <div className="segmented">
               <button
                 type="button"
@@ -235,7 +242,7 @@ export function MoonAscendantExplorer({ userEmail }: Props) {
             <RowTable rows={rawTab === "moon" ? moonRawRows : ascRawRows} />
           </section>
 
-          <section className="panel">
+          <section className="panel" id="moon-filtered">
             <div className="segmented">
               <button
                 type="button"

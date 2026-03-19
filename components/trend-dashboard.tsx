@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GenericRow, TrendApiResponse } from "@/lib/types";
+import stockUniverseData from "@/data/stock_universes.json";
 
 type Props = {
   data: TrendApiResponse;
@@ -20,6 +21,25 @@ type AstroSnapshot = {
   windowLabel: string;
 };
 
+type UniverseKey = "ALL" | "NIFTY50" | "NIFTY100" | "NIFTY250" | "NIFTY500" | "FNO";
+
+const UNIVERSE_LABELS: Record<UniverseKey, string> = {
+  ALL: "All Stocks",
+  NIFTY50: "NIFTY 50",
+  NIFTY100: "NIFTY 100",
+  NIFTY250: "NIFTY 250",
+  NIFTY500: "NIFTY 500",
+  FNO: "F&O"
+};
+
+const UNIVERSE_SYMBOLS_BY_KEY: Record<Exclude<UniverseKey, "ALL">, readonly string[]> = {
+  NIFTY50: stockUniverseData.universes.nifty50,
+  NIFTY100: stockUniverseData.universes.nifty100,
+  NIFTY250: stockUniverseData.universes.nifty250,
+  NIFTY500: stockUniverseData.universes.nifty500,
+  FNO: stockUniverseData.universes.fno
+};
+
 function cellValue(row: GenericRow, key: string): string {
   const value = row[key];
   if (value === null || value === undefined) return "";
@@ -30,6 +50,37 @@ function getColumns(rows: GenericRow[]): string[] {
   const set = new Set<string>();
   rows.forEach((row) => Object.keys(row).forEach((key) => set.add(key)));
   return [...set];
+}
+
+function escapeCsvCell(value: string): string {
+  if (/["\n,]/.test(value)) {
+    return `"${value.replace(/"/g, "\"\"")}"`;
+  }
+  return value;
+}
+
+function rowsToCsv(rows: GenericRow[]): string {
+  if (!rows.length) return "";
+  const columns = getColumns(rows);
+  const lines = [
+    columns.map(escapeCsvCell).join(","),
+    ...rows.map((row) => columns.map((column) => escapeCsvCell(cellValue(row, column))).join(","))
+  ];
+  return lines.join("\n");
+}
+
+function downloadCsvFile(filename: string, rows: GenericRow[]): void {
+  if (!rows.length) return;
+  const csv = rowsToCsv(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 const MONTHS = [
@@ -99,6 +150,23 @@ function valueMatchesDateKey(value: unknown, selectedDateKey: string): boolean {
   const parsed = parseTrendDate(String(value ?? ""));
   if (!selectedDate || !parsed) return false;
   return isSameDay(parsed, selectedDate);
+}
+
+function rowMatchesDayStampSet(row: GenericRow, dayStamps: Set<string>): boolean {
+  if (!dayStamps.size) return true;
+  return Object.values(row).some((value) => {
+    const parsed = parseTrendDate(String(value ?? ""));
+    if (!parsed) return false;
+    return dayStamps.has(dateStamp(parsed));
+  });
+}
+
+function normalizeSymbol(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function getSymbolFromRow(row: GenericRow): string {
+  return normalizeSymbol(row.Symbol ?? row.symbol ?? "");
 }
 
 type DateEntry = {
@@ -215,11 +283,15 @@ function getAstroLevels(referencePrice: number) {
 function Table({
   title,
   rows,
-  maxHeight = 380
+  maxHeight = 380,
+  exportFilename,
+  exportRows
 }: {
   title: string;
   rows: GenericRow[];
   maxHeight?: number;
+  exportFilename?: string;
+  exportRows?: GenericRow[];
 }) {
   if (!rows.length) {
     return (
@@ -231,11 +303,24 @@ function Table({
   }
 
   const columns = getColumns(rows);
+  const compactTable = columns.length <= 4;
+  const effectiveMaxHeight = rows.length > 8 ? maxHeight : undefined;
   return (
     <section className="panel">
-      <h3>{title}</h3>
-      <div className="tableWrap" style={{ maxHeight }}>
-        <table>
+      <div className="panelHead">
+        <h3>{title}</h3>
+        {exportFilename ? (
+          <button
+            type="button"
+            className="controlBtn secondary"
+            onClick={() => downloadCsvFile(exportFilename, exportRows ?? rows)}
+          >
+            Export CSV
+          </button>
+        ) : null}
+      </div>
+      <div className="tableWrap" style={{ maxHeight: effectiveMaxHeight }}>
+        <table style={{ minWidth: compactTable ? 560 : 920 }}>
           <thead>
             <tr>
               {columns.map((column) => (
@@ -247,7 +332,13 @@ function Table({
             {rows.map((row, idx) => (
               <tr key={`${title}-${idx}`}>
                 {columns.map((column) => (
-                  <td key={`${idx}-${column}`}>{cellValue(row, column)}</td>
+                  <td key={`${idx}-${column}`}>
+                    {column === "Symbols" ? (
+                      <div className="symbolsCell">{cellValue(row, column)}</div>
+                    ) : (
+                      cellValue(row, column)
+                    )}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -431,10 +522,54 @@ function AstroDashboard() {
 export function TrendDashboard({ data, userEmail }: Props) {
   const [symbolQuery, setSymbolQuery] = useState("");
   const [dateSortOrder, setDateSortOrder] = useState<"asc" | "desc">("asc");
+  const [selectedUniverse, setSelectedUniverse] = useState<UniverseKey>("ALL");
+  const [dateScope, setDateScope] = useState<"single" | "month">("single");
 
   const payload = data.payload;
   const trendRows = payload.trend_dates;
-  const summaryRows = payload.dates_wise_summary;
+  const allSymbols = useMemo(() => {
+    const set = new Set<string>();
+    trendRows.forEach((row) => {
+      const symbol = getSymbolFromRow(row);
+      if (symbol) set.add(symbol);
+    });
+    return set;
+  }, [trendRows]);
+
+  const selectedUniverseSymbols = useMemo(() => {
+    if (selectedUniverse === "ALL") return null;
+    const symbols = UNIVERSE_SYMBOLS_BY_KEY[selectedUniverse];
+    const allowed = new Set<string>();
+    symbols.forEach((symbol) => {
+      if (allSymbols.has(symbol)) allowed.add(symbol);
+    });
+    return allowed;
+  }, [allSymbols, selectedUniverse]);
+
+  const universeOptions = useMemo(() => {
+    const keys: UniverseKey[] = ["ALL", "NIFTY50", "NIFTY100", "NIFTY250", "NIFTY500", "FNO"];
+    return keys.map((key) => {
+      const count =
+        key === "ALL"
+          ? allSymbols.size
+          : UNIVERSE_SYMBOLS_BY_KEY[key].reduce((acc, symbol) => acc + Number(allSymbols.has(symbol)), 0);
+      return { key, label: UNIVERSE_LABELS[key], count };
+    });
+  }, [allSymbols]);
+
+  const selectedUniverseCount =
+    universeOptions.find((option) => option.key === selectedUniverse)?.count ?? 0;
+
+  const rowMatchesUniverse = useCallback(
+    (row: GenericRow): boolean => {
+      if (!selectedUniverseSymbols) return true;
+      const symbol = getSymbolFromRow(row);
+      if (!symbol) return false;
+      return selectedUniverseSymbols.has(symbol);
+    },
+    [selectedUniverseSymbols]
+  );
+
   const sortedDateKeysAsc = useMemo(
     () =>
       Object.keys(payload.dates_wise_table).sort((a, b) => {
@@ -457,11 +592,11 @@ export function TrendDashboard({ data, userEmail }: Props) {
             date,
             monthYear: monthYearLabel(date),
             dayStamp: dateStamp(date),
-            rowCount: (payload.dates_wise_table[key] ?? []).length
+            rowCount: (payload.dates_wise_table[key] ?? []).filter((row) => rowMatchesUniverse(row)).length
           } satisfies DateEntry;
         })
         .filter((entry): entry is DateEntry => Boolean(entry)),
-    [sortedDateKeysAsc, payload.dates_wise_table]
+    [sortedDateKeysAsc, payload.dates_wise_table, rowMatchesUniverse]
   );
 
   const monthYearOptions = useMemo(() => {
@@ -518,6 +653,15 @@ export function TrendDashboard({ data, userEmail }: Props) {
   }, [dateEntriesAsc, dateSortOrder, selectedMonthYear]);
 
   const monthDateKeys = useMemo(() => dateEntriesForRail.map((entry) => entry.key), [dateEntriesForRail]);
+  const selectedMonthDayStamps = useMemo(() => {
+    const stamps = new Set<string>();
+    dateEntriesAsc.forEach((entry) => {
+      if (entry.monthYear === selectedMonthYear) {
+        stamps.add(entry.dayStamp);
+      }
+    });
+    return stamps;
+  }, [dateEntriesAsc, selectedMonthYear]);
 
   const selectedMonthIndex = useMemo(() => {
     return monthYearOptions.indexOf(selectedMonthYear);
@@ -575,44 +719,33 @@ export function TrendDashboard({ data, userEmail }: Props) {
     if (nextKey) onDateSelect(nextKey);
   }
 
-  function onDateRailKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      stepDate(-1);
-      return;
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      stepDate(1);
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      const firstKey = monthDateKeys[0];
-      if (firstKey) onDateSelect(firstKey);
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      const lastKey = monthDateKeys[monthDateKeys.length - 1];
-      if (lastKey) onDateSelect(lastKey);
-    }
+  function resetFilters() {
+    setSymbolQuery("");
+    setDateSortOrder("asc");
+    setSelectedUniverse("ALL");
+    setDateScope("single");
+    setSelectedMonthYear(defaultMonthYear);
+    setSelectedDateKey(defaultDateKey);
   }
 
   const filteredTrendRows = useMemo(() => {
     const q = symbolQuery.trim().toLowerCase();
     const direction = dateSortOrder === "asc" ? 1 : -1;
+    const matchWholeMonth = dateScope === "month" || (q.length > 0 && selectedMonthDayStamps.size > 0);
     return trendRows
       .filter((row) => {
-      if (selectedDateKey) {
-        const matchesDate = Object.values(row).some((value) => {
-          return valueMatchesDateKey(value, selectedDateKey);
-        });
-        if (!matchesDate) return false;
-      }
-      if (q && !JSON.stringify(row).toLowerCase().includes(q)) return false;
-      return true;
-    })
+        if (!rowMatchesUniverse(row)) return false;
+        if (matchWholeMonth) {
+          if (!rowMatchesDayStampSet(row, selectedMonthDayStamps)) return false;
+        } else if (selectedDateKey) {
+          const matchesDate = Object.values(row).some((value) => {
+            return valueMatchesDateKey(value, selectedDateKey);
+          });
+          if (!matchesDate) return false;
+        }
+        if (q && !JSON.stringify(row).toLowerCase().includes(q)) return false;
+        return true;
+      })
       .sort((a, b) => {
         const ta = firstDateTimestamp(a);
         const tb = firstDateTimestamp(b);
@@ -621,20 +754,48 @@ export function TrendDashboard({ data, userEmail }: Props) {
         if (tb === null) return -1;
         return (ta - tb) * direction;
       });
-  }, [trendRows, symbolQuery, selectedDateKey, dateSortOrder]);
+  }, [
+    trendRows,
+    symbolQuery,
+    selectedDateKey,
+    dateSortOrder,
+    selectedMonthDayStamps,
+    rowMatchesUniverse,
+    dateScope
+  ]);
 
   const filteredSummaryRows = useMemo(() => {
+    const q = symbolQuery.trim().toLowerCase();
     const direction = dateSortOrder === "asc" ? 1 : -1;
-    return summaryRows
+    const matchWholeMonth = dateScope === "month" || (q.length > 0 && selectedMonthDayStamps.size > 0);
+    const rows = Object.entries(payload.dates_wise_table).map(([dateKey, rowsForDate]) => {
+      const filteredRowsForDate = rowsForDate.filter((row) => rowMatchesUniverse(row));
+      const date = parseTrendDate(dateKey);
+      const week = date ? date.toLocaleDateString("en-US", { weekday: "long" }) : "";
+      return {
+        Trend: dateKey,
+        Week: week,
+        Count: filteredRowsForDate.length,
+        Symbols: filteredRowsForDate
+          .map((row) => getSymbolFromRow(row))
+          .filter((symbol, index, arr) => symbol && arr.indexOf(symbol) === index)
+          .join(", ")
+      } satisfies GenericRow;
+    });
+    return rows
       .filter((row) => {
-      if (selectedDateKey) {
-        const matchesDate = Object.values(row).some((value) => {
-          return valueMatchesDateKey(value, selectedDateKey);
-        });
-        if (!matchesDate) return false;
-      }
-      return true;
-    })
+        if (Number(row.Count ?? 0) <= 0) return false;
+        if (matchWholeMonth) {
+          if (!rowMatchesDayStampSet(row, selectedMonthDayStamps)) return false;
+        } else if (selectedDateKey) {
+          const matchesDate = Object.values(row).some((value) => {
+            return valueMatchesDateKey(value, selectedDateKey);
+          });
+          if (!matchesDate) return false;
+        }
+        if (q && !JSON.stringify(row).toLowerCase().includes(q)) return false;
+        return true;
+      })
       .sort((a, b) => {
         const ta = firstDateTimestamp(a);
         const tb = firstDateTimestamp(b);
@@ -643,12 +804,37 @@ export function TrendDashboard({ data, userEmail }: Props) {
         if (tb === null) return -1;
         return (ta - tb) * direction;
       });
-  }, [summaryRows, selectedDateKey, dateSortOrder]);
+  }, [
+    payload.dates_wise_table,
+    symbolQuery,
+    selectedDateKey,
+    dateSortOrder,
+    selectedMonthDayStamps,
+    rowMatchesUniverse,
+    dateScope
+  ]);
 
-  const selectedDateRows = useMemo(
-    () => (selectedDateKey ? payload.dates_wise_table[selectedDateKey] ?? [] : []),
-    [selectedDateKey, payload.dates_wise_table]
-  );
+  const selectedDateRows = useMemo(() => {
+    if (dateScope === "month") {
+      return monthDateKeys.flatMap((dateKey) =>
+        (payload.dates_wise_table[dateKey] ?? []).filter((row) => rowMatchesUniverse(row))
+      );
+    }
+    return selectedDateKey
+      ? (payload.dates_wise_table[selectedDateKey] ?? []).filter((row) => rowMatchesUniverse(row))
+      : [];
+  }, [dateScope, selectedDateKey, payload.dates_wise_table, rowMatchesUniverse, monthDateKeys]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips: string[] = [];
+    if (selectedUniverse !== "ALL") chips.push(`Universe: ${UNIVERSE_LABELS[selectedUniverse]}`);
+    if (symbolQuery.trim()) chips.push(`Search: "${symbolQuery.trim()}"`);
+    chips.push(`Scope: ${dateScope === "month" ? "Whole Month" : "Single Date"}`);
+    chips.push(`Order: ${dateSortOrder === "asc" ? "Oldest → Newest" : "Newest → Oldest"}`);
+    if (dateScope === "month" && selectedMonthYear) chips.push(`Month: ${selectedMonthYear}`);
+    if (dateScope === "single" && selectedDateKey) chips.push(`Date: ${selectedDateKey}`);
+    return chips;
+  }, [dateScope, dateSortOrder, selectedDateKey, selectedMonthYear, selectedUniverse, symbolQuery]);
 
   return (
     <main className="page">
@@ -668,6 +854,22 @@ export function TrendDashboard({ data, userEmail }: Props) {
           </div>
         </div>
         <p className="muted">Authenticated dashboard access is enabled.</p>
+        <div className="heroKpis">
+          <span className="kpiPill">Universe: {UNIVERSE_LABELS[selectedUniverse]} ({selectedUniverseCount})</span>
+          <span className="kpiPill">Mode: {dateScope === "month" ? "Whole Month" : "Single Date"}</span>
+          <span className="kpiPill">Rows: {filteredTrendRows.length}</span>
+        </div>
+        <div className="quickNav">
+          <a className="controlBtn secondary" href="#filters">
+            Filters
+          </a>
+          <a className="controlBtn secondary" href="#results">
+            Results
+          </a>
+          <a className="controlBtn secondary" href="#preview">
+            Preview
+          </a>
+        </div>
         <div className="astroTopNav">
           <Link className="controlBtn secondary" href="/astro">
             Open Astro Workspace
@@ -681,17 +883,48 @@ export function TrendDashboard({ data, userEmail }: Props) {
         </div>
       </header>
 
-      <section className="filtersPanel">
-        <label className="searchField">
-          <span>Search trend rows</span>
-          <input
-            placeholder="Type symbol, date, weekday..."
-            value={symbolQuery}
-            onChange={(e) => setSymbolQuery(e.target.value)}
-          />
-        </label>
-
+      <section className="filtersPanel" id="filters">
         <div className="controlGrid">
+          <label className="searchField controlGridSearch">
+            <span>Search trend rows</span>
+            <div className="searchInputRow">
+              <input
+                placeholder="Type symbol, date, weekday..."
+                value={symbolQuery}
+                onChange={(e) => setSymbolQuery(e.target.value)}
+                aria-label="Search trend rows"
+              />
+              {symbolQuery ? (
+                <button type="button" className="controlBtn secondary searchClearBtn" onClick={() => setSymbolQuery("")}>
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </label>
+
+          <article className="controlCard">
+            <div className="controlHead">
+              <h4>Stock Universe</h4>
+              <p>
+                {UNIVERSE_LABELS[selectedUniverse]} (
+                {universeOptions.find((option) => option.key === selectedUniverse)?.count ?? 0} symbols)
+              </p>
+            </div>
+            <div className="controlActions">
+              <select
+                className="controlSelect"
+                value={selectedUniverse}
+                onChange={(e) => setSelectedUniverse(e.target.value as UniverseKey)}
+              >
+                {universeOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </article>
+
           <article className="controlCard">
             <div className="controlHead">
               <h4>Month-Year</h4>
@@ -732,13 +965,17 @@ export function TrendDashboard({ data, userEmail }: Props) {
             </div>
           </article>
 
-          <article className="controlCard">
+          <article className="controlCard controlCardMonthFilter">
             <div className="controlHead">
               <h4>Month Filter</h4>
               <p className="selectedDateSummary">
-                {selectedDateKey
-                  ? `Selected: ${selectedDateKey} (${selectedDateRows.length} stocks)`
-                  : "No valid date available"}
+                {dateScope === "month"
+                  ? selectedMonthYear
+                    ? `Selected: ${selectedMonthYear} (${selectedDateRows.length} stocks)`
+                    : "No month selected"
+                  : selectedDateKey
+                    ? `Selected: ${selectedDateKey} (${selectedDateRows.length} stocks)`
+                    : "No valid date available"}
               </p>
             </div>
             <div className="controlActions controlActionsDate">
@@ -759,25 +996,29 @@ export function TrendDashboard({ data, userEmail }: Props) {
                 Next Date
               </button>
             </div>
-            <div
-              className="dateMiniRail"
-              tabIndex={0}
-              onKeyDown={onDateRailKeyDown}
-              aria-label="Date selector rail. Use Left and Right arrow keys to change date."
-            >
-              {monthDateKeys.map((dateKey) => (
-                <button
-                  type="button"
-                  key={dateKey}
-                  className={`dateMiniCard ${dateKey === selectedDateKey ? "active" : ""}`}
-                  onClick={() => onDateSelect(dateKey)}
-                  aria-pressed={dateKey === selectedDateKey}
-                >
-                  <span>{dateKey}</span>
-                  <b>{(payload.dates_wise_table[dateKey] ?? []).length}</b>
-                </button>
-              ))}
-              {!monthDateKeys.length ? <p className="muted">No dates available for this month.</p> : null}
+            {!monthDateKeys.length ? <p className="muted">No dates available for this month.</p> : null}
+          </article>
+
+          <article className="controlCard controlCardScope">
+            <div className="controlHead">
+              <h4>Scope</h4>
+              <p>{dateScope === "single" ? "Single date mode" : "Whole month mode"}</p>
+            </div>
+            <div className="segmented">
+              <button
+                type="button"
+                className={`segmentBtn ${dateScope === "single" ? "active" : ""}`}
+                onClick={() => setDateScope("single")}
+              >
+                Single Date
+              </button>
+              <button
+                type="button"
+                className={`segmentBtn ${dateScope === "month" ? "active" : ""}`}
+                onClick={() => setDateScope("month")}
+              >
+                Whole Month
+              </button>
             </div>
           </article>
 
@@ -804,20 +1045,50 @@ export function TrendDashboard({ data, userEmail }: Props) {
             </div>
           </article>
         </div>
+        <div className="filterStatusBar" aria-live="polite">
+          <p className="muted">
+            Showing <strong>{filteredTrendRows.length}</strong> trend rows and{" "}
+            <strong>{filteredSummaryRows.length}</strong> summary rows.
+          </p>
+          <div className="activeChipRow">
+            {activeFilterChips.map((chip) => (
+              <span key={chip} className="activeChip">
+                {chip}
+              </span>
+            ))}
+          </div>
+          <button type="button" className="controlBtn secondary" onClick={resetFilters}>
+            Reset Filters
+          </button>
+        </div>
       </section>
 
-      <div className="grid2">
-        <Table title="Trend Dates" rows={filteredTrendRows} />
-        <Table title="Date-Wise Summary" rows={filteredSummaryRows} />
+      <div className="grid2" id="results">
+        <Table title="Trend Dates" rows={filteredTrendRows} exportFilename="trend-dates.csv" />
+        <Table
+          title="Date-Wise Summary"
+          rows={filteredSummaryRows}
+          exportFilename="date-wise-summary.csv"
+        />
       </div>
 
-      <section className="panel">
+      <section className="panel" id="preview">
         <h3>Date-Wise Table Preview</h3>
         <p className="muted">
-          Showing rows for <strong>{selectedDateKey || "no date selected"}</strong>
+          Showing rows for{" "}
+          <strong>
+            {dateScope === "month"
+              ? selectedMonthYear || "no month selected"
+              : selectedDateKey || "no date selected"}
+          </strong>
         </p>
         <div className="spacer" />
-        <Table title="Rows For Selected Date" rows={selectedDateRows} maxHeight={450} />
+        <Table
+          title={dateScope === "month" ? "Rows For Selected Month" : "Rows For Selected Date"}
+          rows={selectedDateRows}
+          maxHeight={450}
+          exportFilename={dateScope === "month" ? "rows-for-selected-month.csv" : "rows-for-selected-date.csv"}
+        />
       </section>
     </main>
   );
